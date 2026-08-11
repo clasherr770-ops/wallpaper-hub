@@ -1,0 +1,212 @@
+import React, { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { motion } from "framer-motion";
+import { Search, SlidersHorizontal, X } from "lucide-react";
+import { base44 } from "@/api/base44Client";
+import WallpaperCard from "@/components/WallpaperCard";
+import { Button } from "@/components/ui/button";
+import { CATEGORIES } from "@/lib/categories";
+import { RESOLUTIONS } from "@/lib/constants";
+
+const SORTS = [
+  { value: "latest", label: "Newest" },
+  { value: "trending", label: "Trending" },
+  { value: "popular", label: "Popularity" },
+  { value: "featured", label: "Featured" },
+];
+
+export default function Browse() {
+  const [params, setParams] = useSearchParams();
+  const q = params.get("q") || "";
+  const category = params.get("category") || "";
+  const sort = params.get("sort") || "latest";
+  const resolution = params.get("resolution") || "";
+
+  const [all, setAll] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState(q);
+  const [showFilters, setShowFilters] = useState(false);
+
+  useEffect(() => { setSearch(q); }, [q]);
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      try {
+        const data = await base44.entities.Wallpaper.list("-created_date", 120);
+        setAll(data);
+      } catch { setAll([]); }
+      setLoading(false);
+    })();
+  }, []);
+
+  const filtered = useMemo(() => {
+    let list = [...all];
+    if (category) list = list.filter((w) => w.category === category);
+    if (resolution) list = list.filter((w) => w.resolution === resolution);
+    if (search.trim()) {
+      const s = search.toLowerCase();
+      list = list.filter(
+        (w) =>
+          w.title?.toLowerCase().includes(s) ||
+          w.category?.toLowerCase().includes(s) ||
+          w.tags?.some((t) => t.toLowerCase().includes(s))
+      );
+    }
+    switch (sort) {
+      case "trending": list = list.sort((a, b) => (b.trending ? 1 : 0) - (a.trending ? 1 : 0)); break;
+      case "popular": list = list.sort((a, b) => (b.downloads || 0) - (a.downloads || 0)); break;
+      case "featured": list = list.sort((a, b) => (b.featured ? 1 : 0) - (a.featured ? 1 : 0)); break;
+      default: list = list.sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
+    }
+    return list;
+  }, [all, category, resolution, search, sort]);
+
+  const setParam = (key, value) => {
+    const next = new URLSearchParams(params);
+    if (value) next.set(key, value); else next.delete(key);
+    setParams(next);
+  };
+
+  return (
+    <div className="mx-auto max-w-[120rem] px-4 sm:px-6 lg:px-8 py-10 sm:py-14">
+      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
+        <h1 className="font-heading text-4xl sm:text-5xl font-black tracking-tight text-white">
+          Browse <span className="text-gradient">Wallpapers</span>
+        </h1>
+        <p className="mt-3 text-muted-foreground">Discover {all.length}+ premium wallpapers — every one just ₹50.</p>
+      </motion.div>
+
+      {/* Search + sort bar */}
+      <div className="mt-8 flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <input
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setParam("q", e.target.value);
+            }}
+            placeholder="Search by title, category or tag..."
+            className="w-full rounded-xl glass border border-white/10 pl-10 pr-3 py-3 text-sm text-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/60"
+          />
+        </div>
+        <div className="flex gap-2 overflow-x-auto">
+          {SORTS.map((s) => (
+            <button
+              key={s.value}
+              onClick={() => setParam("sort", s.value)}
+              className={`shrink-0 rounded-xl px-4 py-3 text-sm font-medium transition-colors ${
+                sort === s.value
+                  ? "bg-spectral text-white"
+                  : "glass border border-white/10 text-muted-foreground hover:text-white"
+              }`}
+            >
+              {s.label}
+            </button>
+          ))}
+          <Button
+            variant="outline"
+            onClick={() => setShowFilters((v) => !v)}
+            className="shrink-0 glass border-white/10 text-muted-foreground hover:text-white"
+          >
+            <SlidersHorizontal className="h-4 w-4 mr-1.5" /> Filters
+          </Button>
+        </div>
+      </div>
+
+      {showFilters && (
+        <motion.div
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: "auto" }}
+          className="mt-4 rounded-2xl glass gradient-border p-5 space-y-4 overflow-hidden"
+        >
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Category</p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setParam("category", "")}
+                className={`rounded-full px-3 py-1.5 text-xs font-medium ${!category ? "bg-spectral text-white" : "glass text-muted-foreground hover:text-white"}`}
+              >
+                All
+              </button>
+              {CATEGORIES.slice(0, 30).map((c) => (
+                <button
+                  key={c.name}
+                  onClick={() => setParam("category", c.name)}
+                  className={`rounded-full px-3 py-1.5 text-xs font-medium ${category === c.name ? "bg-spectral text-white" : "glass text-muted-foreground hover:text-white"}`}
+                >
+                  {c.name}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Resolution</p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setParam("resolution", "")}
+                className={`rounded-full px-3 py-1.5 text-xs font-medium ${!resolution ? "bg-spectral text-white" : "glass text-muted-foreground hover:text-white"}`}
+              >
+                All
+              </button>
+              {RESOLUTIONS.map((r) => (
+                <button
+                  key={r}
+                  onClick={() => setParam("resolution", r)}
+                  className={`rounded-full px-3 py-1.5 text-xs font-medium ${resolution === r ? "bg-spectral text-white" : "glass text-muted-foreground hover:text-white"}`}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
+          </div>
+        </motion.div>
+      )}
+
+      {(category || resolution || search) && (
+        <div className="mt-4 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+          <span>Filters:</span>
+          {category && <Chip label={category} onClear={() => setParam("category", "")} />}
+          {resolution && <Chip label={resolution} onClear={() => setParam("resolution", "")} />}
+          {search && <Chip label={`"${search}"`} onClear={() => { setSearch(""); setParam("q", ""); }} />}
+        </div>
+      )}
+
+      {/* Grid */}
+      {loading ? (
+        <div className="mt-12 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
+          {Array.from({ length: 10 }).map((_, i) => (
+            <div key={i} className="aspect-[2/3] rounded-2xl bg-white/5 animate-pulse" />
+          ))}
+        </div>
+      ) : filtered.length ? (
+        <div className="mt-8 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
+          {filtered.map((w, i) => (
+            <WallpaperCard key={w.id} wallpaper={w} index={i} />
+          ))}
+        </div>
+      ) : (
+        <div className="mt-16 text-center">
+          <p className="text-lg font-semibold text-white">No wallpapers found</p>
+          <p className="mt-2 text-sm text-muted-foreground">Try a different search or clear your filters.</p>
+          <Button
+            onClick={() => setParams({})}
+            className="mt-5 btn-glow border-0 text-white"
+          >
+            Clear filters
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Chip({ label, onClear }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full glass border border-white/10 px-3 py-1 text-xs text-white">
+      {label}
+      <button onClick={onClear} className="hover:text-rose-400"><X className="h-3 w-3" /></button>
+    </span>
+  );
+}
